@@ -2,17 +2,17 @@
 title: Colophon
 permalink: /about/
 layout: page
-excerpt: Hello peeps, I'm student of computer science from Banyuwangi, living in Jogjakarta. This blog for documentation about my programming journey, running on jekyll, hosting on netlify and using my own simple theme.
+excerpt: A dynamic team of skilled software engineers dedicated to delivering innovative solutions.
 comments: false
 ---
 
-He's a student from Banyuwangi, living in Jogjakarta. the blog for documentation about his programming 🎒 journey, running on jekyll, hosting on [now.sh](http://now.sh) and using his own theme, he name it <a href="https://github.com/piharpi/jekyll-klise" target="_blank" rel="noopener">klisé</a>, he also loves to learning web technology; but he often forgot, that a reason why him doing the writing.
+Welcome to ItZoo, a dynamic team of skilled software engineers dedicated to delivering innovative solutions. We specialize in [specific areas, e.g., web development, mobile apps, AI], and excel at transforming complex challenges into robust, scalable software.
 
-If you have a question about him or else, just send a letter to him.
+We recently released IZRandom, a project that highlights our commitment to quality and client satisfaction. With a collaborative spirit and a focus on continuous learning, we stay at the forefront of technological advancements to provide cutting-edge solutions.
 
-You can [report](http://github.com/piharpi/jekyll-klise/issues/new) if there is an broken link(s) or somethings else.
+Thank you for considering ItZoo. We look forward to partnering with you to bring your vision to life.
 
-**may u needs ✨**
+**May u needs ✨**
 
 - {{ site.author.email }}
 - github.com/{{ site.author.github }}
