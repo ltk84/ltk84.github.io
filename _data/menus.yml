@@ -10,9 +10,9 @@
   url: /about/
   external: false # set true if you using external link, see below
 
-- title: app-ads.txt
-  url: /app-ads.txt/
-  external: false # set true if you using external link, see below
+# - title: app-ads.txt
+#   url: /app-ads.txt/
+#   external: false # set true if you using external link, see below
 
 # Example:
 # - title: github
