@@ -1,5 +1,5 @@
 # Site settings
-title: ItZoo Landing
+title: ITZoo Landing
 description: >-
   Fun.
 lang: en-US
@@ -10,14 +10,15 @@ mode: dark
 
 # Profile settings
 author:
-  name: ItZoo
+  name: ITZoo
   bio: >-
-    Just for fun.
+    Why did the random choice go to school?
+    To improve its decision-making skill.
   username: username
-  github: github_username
+  github: ltk84
   twitter: twitter_username
   facebook: facebook_username
-  email: your-email@email.com
+  email: itzoovn@gmail.com
   avatar: /assets/img/avatar.jpg
 
 # URL settings
