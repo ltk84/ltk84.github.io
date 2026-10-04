@@ -1,0 +1,1 @@
+import{j as r}from"./index-BWPzpMko.js";import{E as e}from"./ExerciseForm-BA3OiBdI.js";import"./useMutation-DjyfB3q9.js";import"./equipment-dn7oyoa5.js";import"./muscleGroups-CHlfBXId.js";function p(){return r.jsx(e,{mode:"create"})}export{p as default};

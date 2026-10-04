@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="116" fill="#181a1f"/>
+  <!-- V mark -->
+  <path d="M128 150 L226 372 Q236 394 256 394 Q276 394 286 372 L384 150 L322 150 L256 308 L190 150 Z" fill="#b6e62e"/>
+  <!-- pulse dot -->
+  <circle cx="256" cy="120" r="26" fill="#b6e62e" opacity="0.9"/>
+</svg>

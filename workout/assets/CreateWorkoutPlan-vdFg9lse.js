@@ -1,0 +1,1 @@
+import{j as o}from"./index-BWPzpMko.js";import{W as r}from"./WorkoutPlanForm-Oce6VGEB.js";import"./mutations-BQJtvEbz.js";import"./useMutation-DjyfB3q9.js";import"./queries-QyATS77y.js";import"./useQuery-EYeIpyY0.js";import"./queries-dIm50Lnh.js";function s(){return o.jsx(r,{mode:"create"})}export{s as default};
