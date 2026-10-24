@@ -1881,15 +1881,20 @@ async transactions() {
      Picking an account — or a side of the budget — chooses *whose* ledger you
      are reading, so the running balance has to be that set's balance. Kind,
      search and uncleared only hide rows of the same ledger: a balance that
-     summed nothing but income would be a number about nothing. */
+     summed nothing but income would be a number about nothing.
+     A space chooses whose ledger too: two spaces sharing one account each
+     read their own share of it, or the other space's rows would move the
+     balance between two visible rows with nothing shown to explain it. */
   const inBudgetScope = onB => f.budget === "all" || onB === (f.budget === "on");
   const scopeAccounts = S.accounts.filter(a =>
     (!f.account || a.id === f.account) && inBudgetScope(a.on_budget !== false));
   const scopeIds = new Set(scopeAccounts.map(a => a.id));
 
   // Running balance over every transaction in scope, newest first
-  const scope = S.txs.filter(t => scopeIds.has(t.account_id));
-  let bal = scopeAccounts.reduce((s,a) => s + accBalance(a), 0);
+  const scope = S.txs.filter(t => scopeIds.has(t.account_id) && spaceOK(t));
+  let bal = S.activeSpace === "all"
+    ? scopeAccounts.reduce((s,a) => s + accBalance(a), 0)
+    : scope.reduce((s,t) => s + +t.amount, 0);
   const withBal = scope.map(t => { const r = { t, bal }; bal -= +t.amount; return r; });
   const allTime = m === "all";
   const monthRows = allTime ? withBal : withBal.filter(r => ym(r.t.date) === m);
