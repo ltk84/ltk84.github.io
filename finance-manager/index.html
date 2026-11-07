@@ -96,7 +96,7 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .side-foot button svg{width:16px;height:16px;flex:none}
 .side-foot button:hover{background:rgba(255,255,255,.06);color:#fff}
 .side-foot button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.main{flex:1;margin-left:224px;padding:0 0 90px;max-width:1600px;width:100%}
+.main{flex:1;margin-left:224px;padding:0 0 90px;max-width:1600px;width:100%;min-width:0}
 /* One hairline under the bar, and nothing under the title: the old rule under
    every heading read as a second, competing divider. */
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;
@@ -193,7 +193,9 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 /* One line per transaction, on real columns — Date, Note and Balance stopped
    being crammed into a subtitle, and the pine hero with its 31-bar chart is
    behind “Daily flow” instead of taking the top third of the screen. */
-:root{--reg:34px 128px minmax(120px,1fr) 164px 148px minmax(100px,1fr) 132px 130px 32px}
+/* Fixed columns give way down to a floor before the page has to scroll
+   sideways; at full width every track sits at its maximum, as before. */
+:root{--reg:34px minmax(84px,128px) minmax(110px,1fr) minmax(100px,164px) minmax(84px,148px) minmax(64px,1fr) minmax(100px,132px) minmax(100px,130px) 32px}
 .reg{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);margin-bottom:16px;overflow:visible}
 .tx-strip{display:flex;align-items:center;padding:0 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .tx-strip .cell{padding:12px 20px;display:flex;align-items:baseline;gap:9px;border-left:1px solid var(--line-soft)}
@@ -279,6 +281,7 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
    about what the row is called. The phone has no category column, so its title
    keeps the fallback — and drops the category from the subtitle to match. */
 .led-main .nm-m,.led-main .sub-m{display:none}
+.led-main .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .led-date{font-family:var(--mono);font-size:12.5px;color:var(--ink-soft)}
 .led-cat{font-size:13.5px;color:var(--pos)}
 .led-cat.soft{color:var(--brass)}
@@ -530,12 +533,10 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .dbar::after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--line)}
 .dbar i{position:absolute;top:0;bottom:0;border-radius:99px;min-width:3px}
 .av{flex:none;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:700;letter-spacing:.02em;font-family:var(--sans)}
-.dage{margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.14)}
-.dage-bar{display:flex;height:6px;border-radius:99px;overflow:hidden;background:rgba(255,255,255,.12)}
-.dage-leg{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:8px;font-size:11.5px;color:#AECFC6}
-.dage-leg span{display:inline-flex;align-items:center;gap:6px}
-.dage-leg i{width:8px;height:8px;border-radius:2px}
-.dage-leg b{color:#fff;font-family:var(--mono);font-weight:500}
+.debt-row:last-child{border-bottom:none}
+.debt-note b.stale{color:var(--brass);font-weight:600}
+.dhero{display:flex;align-items:flex-end;gap:36px;flex-wrap:wrap}
+.dhero .big.sm{font-size:20px}
 /* Person sheet */
 .ps-head{display:flex;align-items:center;gap:12px;margin-bottom:14px}
 .ps-nm{display:flex;align-items:center;gap:6px;min-width:0}
@@ -2365,25 +2366,26 @@ async debts() {
   const clear = people.filter(p => !p.open);
   const max = Math.max(1, ...active.map(p => Math.abs(p.net)));
   setBar({ ghosts: [{ label: "Payees", fn: payeesSheet }], primary: { label: "+ Record", fn: () => debtMoveForm(null) } });
-  // What's owed to you, by how long each unpaid loan has waited.
-  const AGE_COL = ["#8FE3C0", "#E6C779", "#F3B3A6"];
-  const aging = [[0, 30, "under 30 days"], [30, 90, "30–90 days"], [90, Infinity, "90+ days"]].map(([a, b, label]) => ({ label, amt: 0, a, b }));
-  active.filter(p => p.net > 0).forEach(p => p.txs.forEach(t => {
-    const v = p.left.get(t.id); if (!v) return;
-    const d = daysSince(t.date); aging.find(g => d >= g.a && d < g.b).amt += v;
-  }));
+  /* Just the totals: what's owed to you, and what you owe when there is any.
+     Whichever is non-zero leads; with both, the second sits beside it. */
+  const first = owedToMe || !iOwe ? ["They owe you", owedToMe, "#fff"] : ["You owe", iOwe, "#F3B3A6"];
+  const hero = `<div class="hero dhero">
+      <div><div class="lbl">${first[0]}</div><div class="big" style="color:${first[2]}">${fmt(first[1], cur)}</div></div>
+      ${owedToMe && iOwe ? `<div><div class="lbl">You owe</div><div class="big sm" style="color:#F3B3A6">${fmt(iOwe, cur)}</div></div>` : ""}
+    </div>`;
 
   const row = p => {
     const age = p.since ? daysSince(p.since) : 0;
     const w = Math.abs(p.net) / max * 50;
-    const stale = p.open && age >= DEBT_STALE;      // the tag carries the days then
-    const sub = !p.open ? `settled · last ${fmtDay(p.last)} ${p.last.slice(0,4)}`
-      : stale ? `since ${fmtDay(p.since)} ${p.since.slice(0,4)}` : `since ${fmtDay(p.since)} · ${age} day${age === 1 ? "" : "s"}`;
+    // Money waiting longer than DEBT_STALE days has its age picked out.
+    const days = `${age} day${age === 1 ? "" : "s"}`;
+    const sub = !p.open ? `settled ${fmtDay(p.last)} ${p.last.slice(0,4)}`
+      : !age ? "new today" : `${age >= DEBT_STALE ? `<b class="stale">${days}</b>` : days} unpaid`;
     const bar = p.net > 0 ? `left:50%;width:${w}%;background:var(--pos)` : `right:50%;width:${w}%;background:var(--brass)`;
     return `<button class="debt-row" data-dp="${p.id}">
       ${avatarHtml(p.name, p.id)}
       <span class="debt-main">
-        <span class="debt-title"><b>${esc(p.name)}</b>${stale ? `<span class="tag brass">${age}d</span>` : ""}</span>
+        <span class="debt-title"><b>${esc(p.name)}</b></span>
         <span class="debt-note">${sub}</span>
       </span>
       ${p.open ? `<span class="dbar" aria-hidden="true"><i style="${bar}"></i></span>` : ""}
@@ -2392,28 +2394,13 @@ async debts() {
   };
 
   el("viewBody").innerHTML = `
-    <div class="hero"><div class="alloc">
-      <div class="left">
-        <div class="lbl">Net position</div>
-        <div class="big" style="color:${owedToMe-iOwe<0?"#F3B3A6":"#fff"}">${fmtSigned(owedToMe - iOwe, cur)}</div>
-      </div>
-      <div class="hero-div"></div>
-      <div class="mid"><div class="stats">
-        <div><div class="lbl sm">They owe you</div><div class="val" style="color:#8FE3C0">${fmt(owedToMe,cur)}</div></div>
-        <div><div class="lbl sm">You owe</div><div class="val" style="color:#F3B3A6">${fmt(iOwe,cur)}</div></div>
-        <div><div class="lbl sm">People ${infoDot("debts", true)}</div><div class="val">${active.length}</div></div>
-      </div></div>
-    </div>
-    ${owedToMe ? `<div class="dage">
-      <span class="dage-bar">${aging.map((g,i) => g.amt ? `<i style="width:${g.amt/owedToMe*100}%;background:${AGE_COL[i]}"></i>` : "").join("")}</span>
-      <span class="dage-leg">${aging.map((g,i) => `<span><i style="background:${AGE_COL[i]}"></i>${g.label} <b>${smv(g.amt)}</b></span>`).join("")}</span>
-    </div>` : ""}</div>
+    ${hero}
     <div class="card" style="padding:0 20px 8px">
-      <div class="day-head" style="position:static;background:none;border-top:none"><b>Open</b><span>${active.length}</span></div>
+      <div class="day-head" style="position:static;background:none;border-top:none"><b>Open</b></div>
       ${active.length ? active.map(row).join("") : `<div class="empty">Nobody owes anything. Lend or borrow with “+ Record”.</div>`}
     </div>
     ${clear.length ? `<div class="card" style="padding:0 20px 8px;opacity:.75">
-      <div class="day-head" style="position:static;background:none;border-top:none"><b>Settled up</b><span>${clear.length}</span></div>
+      <div class="day-head" style="position:static;background:none;border-top:none"><b>Settled up</b></div>
       ${clear.map(row).join("")}
     </div>` : ""}
     <button class="fab" id="fabDebt" title="Money with someone">+</button>`;
@@ -4899,7 +4886,7 @@ function personSheet(id) {
       <div class="ps-acts">
         <button class="btn btn-ghost" id="psOut">↗ I gave</button>
         <button class="btn btn-ghost" id="psIn">↙ I got</button>
-        ${p.net ? `<button class="btn btn-primary" id="psSettle" style="width:auto">Settle ${smv(p.net)}</button>` : ""}
+        ${p.net ? `<button class="btn btn-primary" id="psSettle" style="width:auto">Settle up</button>` : ""}
       </div>
       <div class="field"><label>History · ${p.txs.length}</label><div class="dt-list">${rows}</div></div>
       <div class="m-foot"><button class="btn btn-primary" style="width:auto" id="psClose">Done</button></div>`;
