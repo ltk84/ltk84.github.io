@@ -662,6 +662,11 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .bud-none{font-size:12px;color:var(--ink-soft);padding:4px 8px 8px 24px}
 .bud-card .rp-cnote{gap:8px}
 .bud-card .bud-foot{padding:12px 0 0}
+/* The envelope count sits beside TOTAL. On a phone that label is its own line
+   above the column headings, so .bud-totlbl stands in for it there. */
+.bud-cnt,.bud-totlbl span{font-weight:500;text-transform:none;letter-spacing:0}
+.bud-card .rp-erow.rp-etot .en{display:block;white-space:nowrap}
+.bud-totlbl{display:none;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--ink-soft);margin-bottom:6px}
 .bud-sp{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:12px;color:#9FBCB4}
 .bud-sp span{display:flex;align-items:center;gap:6px;white-space:nowrap}
 .bud-sp i{width:8px;height:8px;border-radius:3px;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.45)}
@@ -670,7 +675,6 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .mv-sub{font-size:11px;color:var(--ink-soft);margin-top:2px}
 .mv-seg{margin-bottom:12px}
 .mv-seg button{flex:1}
-.mv-sel{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:14px;color:var(--ink);font-family:var(--sans)}
 .mv-hint{font-size:12px;color:var(--brass);margin-top:8px}
 .mv-hint:empty{display:none}
 .mv-hint.soft{color:var(--ink-soft)}
@@ -804,6 +808,7 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
   .rp-erow{grid-template-columns:repeat(3,1fr)}
   .rp-erow .en{grid-column:1 / -1}
   .rp-erow.rp-ehead>span:first-child,.rp-erow.rp-etot>span:first-child{display:none}
+  .bud-totlbl{display:block}
 }
 
 /* ---------- Mobile: 16px form fields (anything smaller makes iOS zoom on focus) ---------- */
@@ -862,6 +867,12 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .combo-opt:hover{background:#F1F6F3;color:var(--pine)}
 .combo-opt.on{background:var(--pine);color:#fff;font-weight:600}
 .combo-none{padding:16px 12px;font-size:13px;color:var(--ink-soft);text-align:center}
+.combo-opt:disabled{opacity:.4;cursor:default}
+.combo-opt:disabled:hover{background:none;color:var(--ink)}
+.combo-opt em.neg{color:var(--neg)}
+.combo-opt.on em.neg{color:#F3B3A6}
+.combo-btn>span{flex:1}
+.combo-btn em.combo-bh{font-family:var(--mono);font-size:12px;color:var(--ink-soft)}
 @media(max-width:760px){
   .combo-btn,.combo-q{font-size:16px}
   .combo-opt{padding:12px 10px;font-size:16px}
@@ -1426,10 +1437,10 @@ document.addEventListener("keydown", e => {
 /* ============ Searchable picker ============ */
 /* `sections` is [{ name, items:[{id, name}] }]. A native <select> can group but
    can't filter, and iOS turns a long one into a wheel you have to spin. */
-function comboHTML(id, sections, selId, emptyLabel) {
+function comboHTML(id, sections, selId, emptyLabel, btnHint) {
   const cur = sections.flatMap(s => s.items).find(i => i.id === selId);
   return `<div class="combo" id="${id}" data-sel="${esc(selId || "")}">
-    <button type="button" class="combo-btn"><span${cur ? "" : ' class="soft"'}>${esc(cur ? cur.name : emptyLabel)}</span><em>▾</em></button>
+    <button type="button" class="combo-btn"><span${cur ? "" : ' class="soft"'}>${esc(cur ? cur.name : emptyLabel)}</span>${btnHint ? `<em class="combo-bh">${esc(btnHint)}</em>` : ""}<em>▾</em></button>
     <div class="combo-pop hidden">
       <input class="combo-q" placeholder="Search…" autocomplete="off" spellcheck="false">
       <div class="combo-list"></div>
@@ -1437,7 +1448,8 @@ function comboHTML(id, sections, selId, emptyLabel) {
 }
 /* `opts.hint(id)` puts a short note at the right of each option (how much is
    left in an envelope); `opts.lead` is a list of items shown first, under
-   "Most used", while nothing has been typed. */
+   "Most used", while nothing has been typed. `opts.emptyHint` is the note for
+   the empty choice, and `opts.off(id)` greys out an option that can't be picked. */
 function wireCombo(id, sections, emptyLabel, onPick, opts = {}) {
   const root = el(id); if (!root) return;
   const btn = root.querySelector(".combo-btn"), pop = root.querySelector(".combo-pop");
@@ -1450,10 +1462,11 @@ function wireCombo(id, sections, emptyLabel, onPick, opts = {}) {
     const rows = [];
     const opt = i => {
       const h = opts.hint ? opts.hint(i.id) : "";
-      return `<button type="button" class="combo-opt ${cur === i.id ? "on" : ""}" data-pick="${i.id}"><span>${esc(i.name)}</span>${h ? `<em>${esc(h)}</em>` : ""}</button>`;
+      const off = opts.off ? opts.off(i.id) : false;
+      return `<button type="button" class="combo-opt ${cur === i.id ? "on" : ""}" data-pick="${i.id}"${off ? " disabled" : ""}><span>${esc(i.name)}</span>${h ? `<em${h[0] === "\u2212" ? ' class="neg"' : ""}>${esc(h)}</em>` : ""}</button>`;
     };
     if (!term || emptyLabel.toLowerCase().includes(term))
-      rows.push(`<button type="button" class="combo-opt ${cur ? "" : "on"}" data-pick=""><span>${esc(emptyLabel)}</span></button>`);
+      rows.push(`<button type="button" class="combo-opt ${cur ? "" : "on"}" data-pick=""><span>${esc(emptyLabel)}</span>${opts.emptyHint ? `<em>${esc(opts.emptyHint)}</em>` : ""}</button>`);
     if (!term && opts.lead?.length) {
       rows.push(`<div class="combo-sec">Most used</div>`);
       opts.lead.forEach(i => rows.push(opt(i)));
@@ -1568,9 +1581,6 @@ mq.addEventListener("change", () => {
 /* Every explanatory sentence the screens used to print lives in one of these.
    Tap the dot, read it once, never again. */
 const INFO = {
-  avail: ["Budget, Spent and Left",
-    "Budget is what you put in the envelope this month, plus anything it didn’t spend in earlier months: an envelope keeps its money until you spend or withdraw it. Left is Budget minus Spent; red means you spent more than was in it.",
-    "Open an envelope to fund it, from Left to budget or from another envelope, or to withdraw money from it. This “Left” isn’t the strip at the top: that one is money you haven’t put in an envelope yet."],
   onbudget: ["On budget vs off budget",
     "On-budget balances count towards what you have left to budget. Off-budget accounts — investments, a pension, anything you don’t spend from — are still tracked here, but their balance stays out of the budget.",
     "It’s set per account, not guessed from its type: a credit card left on budget contributes a negative balance, which correctly reduces what there is left to assign."],
@@ -2768,6 +2778,7 @@ function paintBudget() {
   const envAll = envGroups.flatMap(x => x.rows);
   const tot = ["avail","sp","left"].reduce((o,k) => (o[k] = envAll.reduce((s,e) => s + e[k], 0), o), {});
   const overN = envAll.filter(e => e.left < 0).length;
+  const nEnv = `${envAll.length} envelope${envAll.length === 1 ? "" : "s"}`;
   const incCats = S.cats.filter(c => c.is_income && groups.some(g => g.id === c.group_id));
 
   // Left to budget never depends on the month on screen; see leftToBudget().
@@ -2850,13 +2861,13 @@ function paintBudget() {
       <div class="big" style="color:${left<0?"#F3B3A6":"#fff"}">${fmt(left,cur)}</div>
     </div>
     <div class="card rp-env bud-card">
-      <div class="rp-chead"><b>Envelopes</b><span class="rp-cnote">${overN ? `<span style="color:var(--neg)">${overN} over</span>` : ""}${infoDot("avail")}</span></div>
-      ${envAll.length ? `<div class="rp-erow rp-ehead"><span></span><span class="ev">Budget</span><span class="ev">Spent</span><span class="ev">Left</span></div>
-        <div class="rp-erow rp-etot"><span class="en">Total</span>${cells(tot.avail, tot.sp, tot.left)}</div>` : ""}
+      <div class="rp-chead"><b>Envelopes</b><span class="rp-cnote">${overN ? `<span style="color:var(--neg)">${overN} over</span>` : ""}</span></div>
+      ${envAll.length ? `<div class="bud-totlbl">Total <span>· ${nEnv}</span></div>
+        <div class="rp-erow rp-ehead"><span></span><span class="ev">Budget</span><span class="ev">Spent</span><span class="ev">Left</span></div>
+        <div class="rp-erow rp-etot"><span class="en">Total <span class="bud-cnt">· ${nEnv}</span></span>${cells(tot.avail, tot.sp, tot.left)}</div>` : ""}
       ${envGroups.map(grpRow).join("") || `<div class="empty">No envelope groups yet. Add a group, then envelopes in it.</div>`}
       <div class="led-foot bud-foot">
-        <span>${envAll.length} envelope${envAll.length===1?"":"s"}${S.activeSpace==="all"?"":` · ${esc(spaceName(S.activeSpace))}`}</span>
-        <span style="display:flex;gap:8px"><button class="btn btn-ghost btn-sm" id="addCat2">+ Envelope</button><button class="btn btn-ghost btn-sm" id="addGrp">+ Group</button></span>
+        <span style="display:flex;gap:8px;margin-left:auto"><button class="btn btn-ghost btn-sm" id="addCat2">+ Envelope</button><button class="btn btn-ghost btn-sm" id="addGrp">+ Group</button></span>
       </div>
     </div>
     ${incGroups.length ? `<div class="card budtable">
@@ -4310,19 +4321,20 @@ function moveText(e, mv) {
   const go = !a ? (inn ? "Fund" : "Withdraw") : inn ? `Fund ${smv(a)} from ${name}` : `Withdraw ${smv(a)} to ${name}`;
   return { pool, name, warn, go };
 }
+const moveSections = e => e.others.map(x => ({ name: x.g.name, items: x.cats.map(o => ({ id: o.c.id, name: o.c.name })) }));
+const signedSm = v => `${v < 0 ? "\u2212" : ""}${smv(Math.abs(v))}`;
 function moveHTML(e, mv, cur) {
   const inn = mv.dir === "in";
   // An envelope with nothing left can't give money; drop it as the source.
   const srcLeft = mv.other ? e.others.flatMap(x => x.cats).find(x => x.c.id === mv.other)?.left : null;
   if (inn && srcLeft != null && srcLeft <= 0) mv.other = "";
   const t = moveText(e, mv);
-  const signed = v => `${v < 0 ? "−" : ""}${smv(Math.abs(v))}`;
+  const signed = signedSm;
   const chips = [];
   if (inn && e.left < 0) chips.push([-e.left, `Cover ${smv(-e.left)}`]);
   if (inn && t.pool > 0) chips.push([t.pool, `All ${smv(t.pool)}`]);
   if (!inn && e.left > 0) chips.push([e.left, `All ${smv(e.left)}`]);
   chips.push(["+100000", "+100k"], ["+500000", "+500k"], ["+1000000", "+1m"]);
-  const opt = (v, label, off) => `<option value="${v}"${mv.other === v ? " selected" : ""}${off ? " disabled" : ""}>${esc(label)}</option>`;
   return `
     <div class="mv-stats">
       <div class="statbox"><div class="lbl2">Budget</div><div class="v">${fmt(e.avail,cur)}</div>${e.carry > 0 ? `<div class="mv-sub">incl. ${smv(e.carry)} rolled in</div>` : ""}</div>
@@ -4333,11 +4345,8 @@ function moveHTML(e, mv, cur) {
       <div class="tf-seg mv-seg"><button type="button" data-mvdir="in" class="${inn ? "on" : ""}">Fund</button><button type="button" data-mvdir="out" class="${inn ? "" : "on"}">Withdraw</button></div>
       <div class="amt-line"><input id="mvAmt" inputmode="numeric" placeholder="0" value="${mv.amt ? nf0.format(mv.amt) : ""}"><span class="cursym">${cur === "VND" ? "₫" : esc(cur)}</span></div>
       <div class="chiprow" style="margin-top:10px">${chips.map(([v,l]) => `<button type="button" class="qchip" data-mv="${v}">${l}</button>`).join("")}</div>
-      <label class="flabel" for="mvOther" style="margin-top:14px">${inn ? "Take it from" : "Put it back into"}</label>
-      <select id="mvOther" class="mv-sel">
-        ${opt("", `Left to budget · ${signed(e.ltb)}`)}
-        ${e.others.map(x => `<optgroup label="${esc(x.g.name)}">${x.cats.map(o => opt(o.c.id, `${o.c.name} · ${signed(o.left)} left`, inn && o.left <= 0)).join("")}</optgroup>`).join("")}
-      </select>
+      <label class="flabel" style="margin-top:14px">${inn ? "Take it from" : "Put it back into"}</label>
+      ${comboHTML("mvOther", moveSections(e), mv.other, "Left to budget", mv.other ? `${signed(srcLeft)} left` : signed(e.ltb))}
       <div class="mv-hint" id="mvHint">${esc(t.warn)}</div>
       ${e.m < ym(new Date()) ? `<div class="mv-hint soft">${esc(monthLabel(e.m))} is a past month: this changes its budget.</div>` : ""}
       <button type="button" class="btn btn-primary mv-go" id="mvGo">${esc(t.go)}</button>
@@ -4361,7 +4370,12 @@ function wireMove(c, m, mv, render) {
     mv.amt = v[0] === "+" ? mv.amt + Number(v.slice(1)) : Number(v);
     el("mvAmt").value = mv.amt ? nf0.format(mv.amt) : ""; upd();
   });
-  el("mvOther").onchange = ev => { mv.other = ev.target.value; render(); };
+  const leftOf = Object.fromEntries(e.others.flatMap(x => x.cats).map(o => [o.c.id, o.left]));
+  wireCombo("mvOther", moveSections(e), "Left to budget", v => { mv.other = v || ""; render(); }, {
+    hint: id => `${signedSm(leftOf[id])} left`,
+    emptyHint: signedSm(e.ltb),
+    off: id => mv.dir === "in" && leftOf[id] <= 0     // nothing in it to give
+  });
   el("mvGo").onclick = guardBtn(async () => {
     const a = mv.amt;
     if (!a) return toast("Type an amount first");
@@ -4476,7 +4490,7 @@ function catForm(c, presetGroup, month, startDelete, focus) {
         ${c && !confirming && !isSys ? `<button class="btn btn-ghost btn-sm" id="cAsk" style="color:var(--neg)">Delete</button>` : ""}
         ${c && !renaming ? `<button class="btn btn-ghost btn-sm" id="cRename">Rename</button>` : ""}
         ${c ? "" : `<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="closeModal()">Cancel</button>`}
-        <button class="btn btn-primary btn-sm" style="flex:1;width:auto;${valid?"":"background:#9AAAA4;cursor:not-allowed"}" id="cSave">${c ? "Save" : (d.name.trim() ? `Add “${esc(d.name.trim())}”` : "Add category")}</button>
+        ${c && !renaming ? "" : `<button class="btn btn-primary btn-sm" style="flex:1;width:auto;${valid?"":"background:#9AAAA4;cursor:not-allowed"}" id="cSave">${c ? "Save name" : (d.name.trim() ? `Add “${esc(d.name.trim())}”` : "Add category")}</button>`}
       </div>`;
     wire(valid);
   };
@@ -4520,7 +4534,8 @@ function catForm(c, presetGroup, month, startDelete, focus) {
       toast(`“${c.name}” deleted${txCount && reassignTo !== "none" ? ` · ${txCount} moved` : ""}`);
       refresh();
     };
-    el("cSave").onclick = guardBtn(async () => {
+    // Fund / Withdraw save on their own; Save is only there to rename or create.
+    if (el("cSave")) el("cSave").onclick = guardBtn(async () => {
       const nameInput = el("cName");
       if (nameInput) d.name = nameInput.value.trim();
       const budInput = el("cBud");
