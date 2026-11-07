@@ -647,6 +647,34 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .rp-erow.rp-etot:hover{background:none}
 .rp-erow.rp-etot .en{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--ink-soft)}
 .rp-erow.rp-etot .ev{font-weight:700}
+/* Budget reuses the Reports envelope rows and adds what only it needs: group
+   actions, empty envelopes, Left to budget per space and the move sheet. */
+.rp-erow .ev.zero{color:#9AAAA4;font-weight:400}
+.bud-card .rp-erow.grp .rp-nm{width:100%}
+.bud-acts{margin-left:auto;display:flex;gap:4px;padding-left:8px}
+/* Envelope names and every bar start after the group's chevron (12px + 4px gap). */
+.bud-env .en{padding-left:16px}
+.bud-card .rp-erow.grp .en>.bar{margin-left:16px}
+.bud-lbl{font-weight:700;color:#fff}
+/* A space's tag: its colour and name, as in the Left to budget strip. */
+.sp-tag{display:inline-flex;align-items:center;gap:5px;flex:none;font-size:11.5px;font-weight:500;color:var(--ink-soft);text-transform:none;letter-spacing:0}
+.sp-tag i{width:8px;height:8px;border-radius:3px;flex:none}
+.bud-none{font-size:12px;color:var(--ink-soft);padding:4px 8px 8px 24px}
+.bud-card .rp-cnote{gap:8px}
+.bud-card .bud-foot{padding:12px 0 0}
+.bud-sp{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:12px;color:#9FBCB4}
+.bud-sp span{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.bud-sp i{width:8px;height:8px;border-radius:3px;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.45)}
+.bud-sp b{font-family:var(--mono);color:#fff;font-weight:600}
+.mv-stats{display:flex;gap:8px;margin-bottom:12px}
+.mv-sub{font-size:11px;color:var(--ink-soft);margin-top:2px}
+.mv-seg{margin-bottom:12px}
+.mv-seg button{flex:1}
+.mv-sel{width:100%;padding:10px 11px;border:1px solid var(--line);border-radius:9px;background:#fff;font-size:14px;color:var(--ink);font-family:var(--sans)}
+.mv-hint{font-size:12px;color:var(--brass);margin-top:8px}
+.mv-hint:empty{display:none}
+.mv-hint.soft{color:var(--ink-soft)}
+.mv-go{width:100%;margin-top:12px}
 .rp-erow.grp .en>.rp-nm>span{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700}
 .rp-erow.grp .ev{font-weight:600}
 .rp-prow{display:grid;grid-template-columns:1fr 52px 52px;gap:8px;align-items:center;padding:6px 8px}
@@ -1186,7 +1214,7 @@ async function rest(path, { method = "GET", body, headers = {} } = {}, retried =
 }
 
 /* ============ State ============ */
-const S = { accounts: [], groups: [], cats: [], txs: [], holdings: [], invtx: [], budgets: [], view: "budget", budgetMonth: ym(new Date()), txFilter: { account: "", kind: "all", budget: "all", q: "", uncleared: false }, txMonth: ym(new Date()), budOpen: {}, debts: [], spaces: [], activeSpace: store.get("space") || "all", flowOpen: false };
+const S = { accounts: [], groups: [], cats: [], txs: [], holdings: [], invtx: [], budgets: [], view: "transactions", budgetMonth: ym(new Date()), txFilter: { account: "", kind: "all", budget: "all", q: "", uncleared: false }, txMonth: ym(new Date()), budOpen: {}, debts: [], spaces: [], activeSpace: store.get("space") || "all", flowOpen: false };
 
 async function loadAll() {
   const [accounts, groups, cats, txs, holdings, invtx, debts, spaces] = await Promise.all([
@@ -1253,7 +1281,7 @@ async function ensureSystemCats() {
     }
   }
 }
-/* All of them, not a window: a rollover envelope's balance is the whole chain
+/* All of them, not a window: an envelope's balance is the whole chain
    of months behind it, so a 4-month slice can't tell you what's in it. One row
    per category per budgeted month — small enough to just hold. */
 async function loadBudgets() { S.budgets = await rest("budgets?select=*"); }
@@ -1292,7 +1320,32 @@ function accBalance(a) { return (Number(a.starting_balance) || 0) + S.txs.filter
    from its type. A credit card left on budget contributes a negative balance,
    which correctly reduces what there is left to budget. */
 function onBudgetAccounts() { return S.accounts.filter(a => !a.is_closed && a.on_budget !== false); }
-function budgetFunds() { return onBudgetAccounts().reduce((s,a) => s + accBalance(a), 0); }
+/* A space's share of the on-budget money. Accounts are shared by every space,
+   but each transaction belongs to one, so a space owns exactly what its own
+   transactions put into (or took out of) on-budget accounts. Transfers carry
+   the space on both legs and cancel out; one to an off-budget account takes
+   money out of the budget. An account's legacy starting balance belongs to
+   the first space, where untagged transactions were moved too. */
+function spaceFunds(space = S.activeSpace) {
+  const inSp = sid => space === "all" || sid === space;
+  const accs = onBudgetAccounts(), ids = new Set(accs.map(a => a.id));
+  const start = inSp(S.spaces[0]?.id) ? accs.reduce((s,a) => s + (Number(a.starting_balance) || 0), 0) : 0;
+  return S.txs.reduce((s,t) => ids.has(t.account_id) && inSp(t.space_id) ? s + Number(t.amount) : s, start);
+}
+/* Left to budget: a space's on-budget money that is in no envelope yet. It
+   does not depend on the month on screen: it is what is still unspent in
+   every envelope today, plus whatever has already been budgeted for months
+   after this one. Overspending is not held by anything, so it comes out of
+   this number, as it should: that money really left the accounts. */
+function leftToBudget(space = S.activeSpace) {
+  const L = envLedger(), now = ym(new Date());
+  const gids = new Set(S.groups.filter(g => !g.is_income && (space === "all" || g.space_id === space)).map(g => g.id));
+  const cats = S.cats.filter(c => !c.is_income && gids.has(c.group_id));
+  const later = [...new Set(S.budgets.map(b => b.month))].filter(mo => mo > now);
+  const held = cats.reduce((s,c) => s + Math.max(0, L.availAt(c, now) - L.spentAt(c.id, now))
+    + later.reduce((t,mo) => t + Math.max(0, L.bAt(mo, c.id) - L.spentAt(c.id, mo)), 0), 0);
+  return spaceFunds(space) - held;
+}
 function catName(id) { const c = S.cats.find(c => c.id === id); return c ? c.name : "—"; }
 function accName(id) { const a = S.accounts.find(a => a.id === id); return a ? a.name : "?"; }
 const CUR = () => (S.accounts[0]?.currency) || "VND";
@@ -1479,20 +1532,20 @@ const TX_BUDGET_META = [
    Overview is gone: its net worth belongs with the other retrospective numbers
    in Reports, and everything else on it was a worse copy of another screen. */
 const VIEWS = [
-  ["budget","Budget",IC.bud],["transactions","Transactions",IC.tx],
+  ["transactions","Transactions",IC.tx],["budget","Budget",IC.bud],
   ["reports","Reports",IC.rep],["accounts","Accounts",IC.acc],
   ["invest","Investments",IC.inv],["debts","Debts",IC.debt],
   ["more","More",IC.more]
 ];
-const PRIMARY = ["budget","transactions","reports","accounts"];   // the sidebar's top list
+const PRIMARY = ["transactions","budget","reports","accounts"];   // the sidebar's top list
 const SECONDARY = ["invest","debts"];                             // under the rule
-const TABS = ["budget","transactions","reports","more"];          // the phone's tab bar
+const TABS = ["transactions","budget","reports","more"];          // the phone's tab bar
 const mq = window.matchMedia("(max-width:760px)");
 const isPhone = () => mq.matches;
 const viewOf = id => VIEWS.find(v => v[0] === id);
 /* “More” is a phone screen. On a desktop every view it holds is already in the
-   sidebar, so landing there sends you to the budget instead. */
-const HOME = "budget";
+   sidebar, so landing there sends you to Transactions instead. */
+const HOME = "transactions";
 
 function renderNav() {
   const phone = isPhone();
@@ -1515,21 +1568,15 @@ mq.addEventListener("change", () => {
 /* Every explanatory sentence the screens used to print lives in one of these.
    Tap the dot, read it once, never again. */
 const INFO = {
-  left: ["How “left to budget” is worked out",
-    "The real balance of your on-budget accounts, minus whatever is still sitting unspent in envelopes. It isn’t this month’s income: money that arrived in March is yours to assign in July.",
-    "Card balances pull it down — what you owe on a credit card is not money you have."],
-  avail: ["What’s in each envelope",
-    "What you budgeted this month, plus anything a rollover envelope carried in from earlier months, minus what you’ve spent. Red means you spent more than was in it.",
-    "Click an envelope to change its budget or see Budgeted and Spent. This isn’t the same “left” as the strip above: that one is money you haven’t put in an envelope yet."],
+  avail: ["Budget, Spent and Left",
+    "Budget is what you put in the envelope this month, plus anything it didn’t spend in earlier months: an envelope keeps its money until you spend or withdraw it. Left is Budget minus Spent; red means you spent more than was in it.",
+    "Open an envelope to fund it, from Left to budget or from another envelope, or to withdraw money from it. This “Left” isn’t the strip at the top: that one is money you haven’t put in an envelope yet."],
   onbudget: ["On budget vs off budget",
     "On-budget balances count towards what you have left to budget. Off-budget accounts — investments, a pension, anything you don’t spend from — are still tracked here, but their balance stays out of the budget.",
     "It’s set per account, not guessed from its type: a credit card left on budget contributes a negative balance, which correctly reduces what there is left to assign."],
   uncleared: ["Cleared, uncleared, reconciled",
     "A transaction is cleared once you’ve seen it on the real account. Uncleared is the gap between what you logged and what the bank has actually processed.",
     "Reconciling locks a transaction: it matched a statement, so the app stops letting you edit it by accident."],
-  rollover: ["Rollover envelopes",
-    "A rollover envelope keeps whatever it doesn’t spend, so it behaves like a running balance rather than a monthly allowance — the way you’d save 500k a month for a bill that arrives once a year.",
-    "Everything else resets on the 1st: unspent money goes back to the pot and can be assigned somewhere else."],
   spaces: ["Budget spaces",
     "Separate budgets — Personal and Team, say — that share the same real accounts. Categories and transactions belong to a space; account balances stay whole across all of them.",
     "“All spaces” is a read-only roll-up."],
@@ -2277,8 +2324,8 @@ async reports() {
 
 /* Envelope balances, shared by Budget and Reports so the two can never
    disagree about what is left in an envelope.
-   Carry-in for rollover envelopes: a rollover envelope is a running balance,
-   so its carry-in is the whole chain behind it, not just last month's
+   Every envelope keeps what it doesn't spend: it is a running balance, so
+   its carry-in is the whole chain behind it, not just last month's
    leftover. Put 500k a month aside for a 6m annual bill and month 3 must show
    1m carried in, not 500k. Walk forward from the first month the category saw
    any activity, keeping the running remainder. Budgets are indexed and
@@ -2306,9 +2353,8 @@ function envLedger() {
   };
   const availCache = {};
   // Money sitting in the envelope for month `mo`: this month's budget plus
-  // everything rolled over into it.
+  // everything it didn't spend before.
   const availAt = (c, mo) => {
-    if (!c.rollover) return bAt(mo, c.id);
     const key = c.id + "|" + mo;
     if (key in availCache) return availCache[key];
     const first = firstMonthOf(c.id);
@@ -2698,7 +2744,7 @@ function ordinal(n) { const s = ["th","st","nd","rd"], v = n % 100; return n + (
 function paintBudget() {
   const cur = CUR(); const m = S.budgetMonth;
   const prevM = shiftMonth(m, -1);
-  const { bAt, availAt } = envLedger();   // budgets and rollover carry-in, shared with Reports
+  const L = envLedger();   // budgets and carry-in, shared with Reports
 
   const spentBy = {}, incomeBy = {};
   S.txs.filter(t => ym(t.date) === m && t.category_id && !t.transfer_account_id).forEach(t => {
@@ -2706,35 +2752,53 @@ function paintBudget() {
     else incomeBy[t.category_id] = (incomeBy[t.category_id]||0) + +t.amount;
   });
 
+  /* Envelopes look like the Reports card: Budget (this month plus anything
+     rolled in), Spent and Left, with a total row under the headings. Unlike
+     Reports, every envelope is listed, empty ones too, so a new one can be
+     funded. Clicking an envelope opens its sheet, where money is moved. */
+  const groups = S.groups.filter(groupInSpace);
+  const envGroups = groups.filter(g => !g.is_income).map(g => {
+    const rows = S.cats.filter(c => c.group_id === g.id && !c.is_income).map(c => {
+      const avail = L.availAt(c, m), sp = L.spentAt(c.id, m);
+      return { c, avail, sp, left: avail - sp, carry: avail - L.bAt(m, c.id) };
+    });
+    const sum = k => rows.reduce((s,e) => s + e[k], 0);
+    return { g, rows, avail: sum("avail"), sp: sum("sp"), left: sum("left") };
+  });
+  const envAll = envGroups.flatMap(x => x.rows);
+  const tot = ["avail","sp","left"].reduce((o,k) => (o[k] = envAll.reduce((s,e) => s + e[k], 0), o), {});
+  const overN = envAll.filter(e => e.left < 0).length;
+  const incCats = S.cats.filter(c => c.is_income && groups.some(g => g.id === c.group_id));
 
-  const gset = new Set(S.groups.filter(groupInSpace).map(g => g.id));
-  const expCats = S.cats.filter(c => !c.is_income && gset.has(c.group_id));
-  const incCats = S.cats.filter(c => c.is_income && gset.has(c.group_id));
-  // What is in the envelope right now: its budget, anything rolled in, less spending.
-  const leftIn = c => availAt(c, m) - (spentBy[c.id]||0);
-  // The envelope sheet shows Available too; hand it the rolled-in part so the
-  // two agree for rollover envelopes.
-  S.carryIn = { month: m, by: Object.fromEntries(expCats.map(c => [c.id, availAt(c, m) - bAt(m, c.id)])) };
+  // Left to budget never depends on the month on screen; see leftToBudget().
+  const left = leftToBudget();
+  const perSpace = S.activeSpace === "all" && S.spaces.length > 1 ? S.spaces.map(sp => ({ sp, v: leftToBudget(sp.id) })) : [];
 
-  /* What's actually left to budget is not "this month's income minus the
-     budget" — you can assign money that arrived in March, and a card balance is
-     money you owe, not money you have. So: take the real balance of every
-     on-budget account (credit cards run negative and pull the total down), then
-     subtract what is still sitting unspent in envelopes. Money already spent has
-     left the accounts, so it must not be subtracted twice. */
-  const funds = budgetFunds();
-  const held = expCats.reduce((s,c) => s + Math.max(0, leftIn(c)), 0);
-  const left = funds - held;
-
-  /* The screen answers one question: how much is in each envelope. Budgeted,
-     spent, the allocation bar and the rest of the totals live in the envelope
-     sheet a click away. One ⋯ per row on desktop; on a phone the row itself
-     opens that sheet, which carries rollover, rename and delete. */
-  const gAddEdit = g => `<span class="benv-actions"><button class="mini" data-gadd="${g.id}" title="Add category to this group">+</button><button class="sq" data-gmenu="${g.id}" data-menu-id="g${g.id}" title="Group actions">⋯</button></span>`;
-  const envDots = c => `<span class="benv-actions"><button class="sq" data-cmenu="${c.id}" data-menu-id="c${c.id}" title="Envelope actions">⋯</button></span>`;
+  const bar = (avail, sp, l) => {
+    const ratio = avail > 0 ? sp / avail : sp > 0 ? 1 : 0;
+    return `<span class="bar"><i style="width:${Math.min(100, ratio*100)}%;background:${l < 0 ? "var(--neg)" : ratio > .85 ? "var(--brass)" : "var(--pos)"}"></i></span>`;
+  };
+  const cells = (avail, sp, l) => `<span class="ev${avail ? "" : " zero"}">${smv(avail)}</span><span class="ev${sp ? "" : " zero"}">${smv(sp)}</span>
+    <span class="ev el ${l < 0 ? "neg" : l ? "pos" : "zero"}">${l < 0 ? "−" : ""}${smv(Math.abs(l))}</span>`;
+  const envRow = e => `<div class="rp-erow bud-env" data-env="${e.c.id}" title="Fund or withdraw">
+      <span class="en"><span class="rp-nm"><span>${esc(e.c.name)}</span>${e.carry > 0 ? `<em title="Rolled in from earlier months">+${smv(e.carry)} in</em>` : ""}</span>${bar(e.avail, e.sp, e.left)}</span>
+      ${cells(e.avail, e.sp, e.left)}
+    </div>`;
+  const grpRow = x => {
+    const open = !!S.budOpen[x.g.id];   // groups start collapsed; the totals are enough at a glance
+    return `<div class="rp-egrp">
+      <div class="rp-erow grp${open ? " open" : ""}" data-gt="${x.g.id}">
+        <span class="en"><span class="rp-nm">${RP_CHEV}<span>${esc(x.g.name)}</span>
+          <span class="benv-actions bud-acts"><button class="mini" data-gadd="${x.g.id}" title="Add an envelope to this group">+</button><button class="sq" data-gmenu="${x.g.id}" data-menu-id="g${x.g.id}" title="Group actions">⋯</button></span></span>
+          ${bar(x.avail, x.sp, x.left)}</span>
+        ${cells(x.avail, x.sp, x.left)}
+      </div>
+      ${open ? (x.rows.map(envRow).join("") || `<div class="bud-none">No envelopes in this group yet.</div>`) : ""}
+    </div>`;
+  };
 
   /* Income groups aren't envelopes: there is nothing to budget, spend or have
-     left over. They just report what came in, so they get their own layout. */
+     left over. They just report what came in, so they get their own card. */
   const incomeGroupHTML = g => {
     const list = S.cats.filter(c => c.group_id === g.id);
     /* Built-in categories move both ways — a card's opening balance is
@@ -2742,45 +2806,20 @@ function paintBudget() {
        than only what came in. Ordinary income sources only ever go up. */
     const flow = c => c.is_system ? (incomeBy[c.id]||0) - (spentBy[c.id]||0) : (incomeBy[c.id]||0);
     const gs = list.reduce((s,c) => s + flow(c), 0);
-    const open = !!S.budOpen[g.id];   // groups start collapsed; the header total is enough at a glance
+    const open = !!S.budOpen[g.id];
     return `<div>
       <div class="bgrp-head inc" data-gt="${g.id}">
-        <span class="bgrp-name"><i class="caret">${open?"▼":"▶"}</i><b>${esc(g.name)}</b></span>
+        <span class="bgrp-name"><i class="caret">${open?"▼":"▶"}</i><b>${esc(g.name)}</b>${S.activeSpace === "all" && S.spaces.length > 1 ? `<span class="sp-tag"><i style="background:${spaceColor(g.space_id)}"></i>${esc(spaceName(g.space_id))}</span>` : ""}</span>
         <span class="num ${gs>0?"pos":gs<0?"neg":"soft"}">${fmt(gs,cur)}</span>
-        ${gAddEdit(g)}
+        <span class="benv-actions"><button class="mini" data-gadd="${g.id}" title="Add an income source">+</button><button class="sq" data-gmenu="${g.id}" data-menu-id="g${g.id}" title="Group actions">⋯</button></span>
       </div>
-      <div data-gbody="${g.id}" style="${open ? "" : "display:none"}">
-      ${list.map(c => {
+      ${open ? list.map(c => {
         const got = flow(c);
         return `<div class="binc" data-env="${c.id}">
           <div class="benv-title"><b>${esc(c.name)}</b>${c.is_system?'<span class="pillmini">built-in</span>':""}</div>
           <span class="num ${got>0?"pos":got<0?"neg":"zero"}">${fmt(got,cur)}</span>
-          ${envDots(c)}
-        </div>`; }).join("")}
-      </div>
-    </div>`;
-  };
-
-  const groupHTML = g => {
-    if (g.is_income) return incomeGroupHTML(g);
-    const list = S.cats.filter(c => c.group_id === g.id);
-    const gl = list.reduce((s,c) => s + leftIn(c), 0);
-    const open = !!S.budOpen[g.id];   // groups start collapsed; the header total is enough at a glance
-    return `<div>
-      <div class="bgrp-head" data-gt="${g.id}">
-        <span class="bgrp-name"><i class="caret">${open?"▼":"▶"}</i><b>${esc(g.name)}</b></span>
-        <span class="num ${gl<0?"neg":gl===0?"zero":"pos"}">${fmt(gl,cur)}</span>
-        ${gAddEdit(g)}
-      </div>
-      <div data-gbody="${g.id}" style="${open ? "" : "display:none"}">
-      ${list.map(c => {
-        const l = leftIn(c);
-        return `<div class="benv" data-env="${c.id}">
-          <div class="benv-title"><b>${esc(c.name)}</b></div>
-          <span class="num ${l<0?"neg":l===0?"zero":"pos"}">${fmt(l,cur)}</span>
-          ${envDots(c)}
-        </div>`; }).join("")}
-      </div>
+          <span class="benv-actions"><button class="sq" data-cmenu="${c.id}" data-menu-id="c${c.id}" title="Source actions">⋯</button></span>
+        </div>`; }).join("") : ""}
     </div>`;
   };
 
@@ -2795,73 +2834,69 @@ function paintBudget() {
     month: { label: monthLabel(m), prev: () => { S.budgetMonth = shiftMonth(m,-1); go("budget"); }, next: () => { S.budgetMonth = shiftMonth(m,1); go("budget"); } },
     scope: m === ym(new Date()) ? null : { label: "Today", fn: () => { S.budgetMonth = ym(new Date()); go("budget"); } },
     ghosts: [{ label: "Auto-fill ▾", fn: () => {} }],
-    primary: { label: "+ Category", fn: () => catForm(null, null, m) }
+    primary: { label: "+ Envelope", fn: () => catForm(null, null, m) }
   });
   el("barG0").dataset.menuId = "autofill";
   el("barG0").onclick = e => { e.stopPropagation();
     openMenu(el("barG0"), AUTOFILL.map(a => ({ label: a.label, danger: a.danger, fn: () => bulkFill(m, a.mode) }))); };
 
+  const incGroups = groups.filter(g => g.is_income);
   el("viewBody").innerHTML = `
     <div class="hero bud-left">
-      <div class="lbl">${left<0?"Over-allocated":"Left to budget"} ${infoDot("left", true)}</div>
+      <div style="min-width:0">
+        <div class="lbl bud-lbl">${left<0?"Over-allocated":"Left to budget"}</div>
+        ${perSpace.length ? `<div class="bud-sp">${perSpace.map(x => `<span><i style="background:${spaceColor(x.sp.id)}"></i>${esc(x.sp.name)} <b>${x.v < 0 ? "−" : ""}${smv(Math.abs(x.v))}</b></span>`).join("")}</div>` : ""}
+      </div>
       <div class="big" style="color:${left<0?"#F3B3A6":"#fff"}">${fmt(left,cur)}</div>
     </div>
-    <div class="card budtable">
-      <div class="bud-cols"><span>Envelope</span><span class="r">In envelope ${infoDot("avail")}</span><span></span></div>
-      ${S.groups.filter(groupInSpace).map(groupHTML).join("")}
-      <div class="led-foot">
-        <span>${expCats.length} envelope${expCats.length===1?"":"s"} · ${incCats.length} income source${incCats.length===1?"":"s"}${S.activeSpace==="all"?"":` · ${esc(spaceName(S.activeSpace))}`}</span>
-        <span style="display:flex;gap:8px"><button class="btn btn-ghost btn-sm" id="addCat2">+ Category</button><button class="btn btn-ghost btn-sm" id="addGrp">+ Group</button></span>
+    <div class="card rp-env bud-card">
+      <div class="rp-chead"><b>Envelopes</b><span class="rp-cnote">${overN ? `<span style="color:var(--neg)">${overN} over</span>` : ""}${infoDot("avail")}</span></div>
+      ${envAll.length ? `<div class="rp-erow rp-ehead"><span></span><span class="ev">Budget</span><span class="ev">Spent</span><span class="ev">Left</span></div>
+        <div class="rp-erow rp-etot"><span class="en">Total</span>${cells(tot.avail, tot.sp, tot.left)}</div>` : ""}
+      ${envGroups.map(grpRow).join("") || `<div class="empty">No envelope groups yet. Add a group, then envelopes in it.</div>`}
+      <div class="led-foot bud-foot">
+        <span>${envAll.length} envelope${envAll.length===1?"":"s"}${S.activeSpace==="all"?"":` · ${esc(spaceName(S.activeSpace))}`}</span>
+        <span style="display:flex;gap:8px"><button class="btn btn-ghost btn-sm" id="addCat2">+ Envelope</button><button class="btn btn-ghost btn-sm" id="addGrp">+ Group</button></span>
       </div>
     </div>
-    <button class="fab" id="fabCat" title="New category">+</button>`;
+    ${incGroups.length ? `<div class="card budtable">
+      <div class="bud-cols"><span>Income</span><span class="r">Received in ${esc(monthLabel(m).split(" ")[0])}</span><span></span></div>
+      ${incGroups.map(incomeGroupHTML).join("")}
+      <div class="led-foot"><span>${incCats.length} income source${incCats.length===1?"":"s"}</span></div>
+    </div>` : ""}
+    <button class="fab" id="fabCat" title="New envelope">+</button>`;
 
   el("addCat2").onclick = el("fabCat").onclick = () => catForm(null, null, m);
   el("addGrp").onclick = () => groupForm();
   document.querySelectorAll("[data-gt]").forEach(h => h.onclick = e => {
     if (e.target.closest(".benv-actions")) return;
-    const id = h.dataset.gt, closed = !!S.budOpen[id];
-    S.budOpen[id] = !closed;
-    const body = document.querySelector(`[data-gbody="${id}"]`);
-    if (body) body.style.display = closed ? "none" : "";
-    const caret = h.querySelector(".caret");
-    if (caret) caret.textContent = closed ? "\u25B6" : "\u25BC"; });
+    S.budOpen[h.dataset.gt] = !S.budOpen[h.dataset.gt];
+    keepPlace(paintBudget);
+  });
   document.querySelectorAll("[data-gadd]").forEach(b => b.onclick = e => { e.stopPropagation(); catForm(null, b.dataset.gadd, m); });
   document.querySelectorAll("[data-gmenu]").forEach(b => b.onclick = e => {
     e.stopPropagation();
     const g = S.groups.find(x => x.id === b.dataset.gmenu);
     openMenu(b, [
-      { label: "Add a category…", fn: () => catForm(null, g.id, m) },
+      { label: g.is_income ? "Add an income source…" : "Add an envelope…", fn: () => catForm(null, g.id, m) },
       { label: "Edit group…", fn: () => groupForm(g) }
     ]);
   });
-  /* Rollover, rename and delete were desktop-only icons in this row, which is
-     how a phone lost them. One ⋯ carries them all on both. */
+  // Income sources keep a ⋯ menu; an envelope's options all live in its sheet.
   document.querySelectorAll("[data-cmenu]").forEach(b => b.onclick = e => {
     e.stopPropagation();
     const c = S.cats.find(x => x.id === b.dataset.cmenu);
-    const inc = !!S.groups.find(g => g.id === c.group_id)?.is_income;
-    const toggle = (field, msg) => async () => {
-      const was = !!c[field];
-      c[field] = !was; keepPlace(paintBudget); toast(msg(!was));
-      try { await rest(`categories?id=eq.${c.id}`, { method: "PATCH", body: { [field]: c[field] } }); }
-      catch (err) { c[field] = was; keepPlace(paintBudget); toast(err.message); }
-    };
-    const items = [{ label: inc ? "Edit source…" : "Edit envelope…", fn: () => catForm(c, null, m) }];
-    if (!inc) {
-      items.push({ label: "Roll unspent over", hint: c.rollover ? "on" : "off",
-        fn: toggle("rollover", on => on ? "Rolls over each month" : "Resets each month") });
-    }
+    const items = [{ label: "Edit source…", fn: () => catForm(c, null, m) }];
     if (!c.is_system) items.push(null, { label: "Delete…", danger: true, fn: () => catForm(c, null, m, true) });
     openMenu(b, items);
   });
-  /* Clicking an envelope opens its sheet, where the budget is set. On desktop
-     it lands straight in the number; on a phone that would pop the keyboard
-     when you only wanted to look. */
+  /* Clicking an envelope opens its sheet. On desktop it lands straight in the
+     amount to move; on a phone that would pop the keyboard when you only
+     wanted to look. */
   document.querySelectorAll("[data-env]").forEach(r => r.onclick = e => {
     if (e.target.closest(".benv-actions")) return;
     const c = S.cats.find(x => x.id === r.dataset.env);
-    catForm(c, null, m, false, isPhone() || c.is_income ? undefined : "budget");
+    catForm(c, null, m, false, isPhone() || c.is_income ? undefined : "move");
   });
 }
 
@@ -3497,15 +3532,14 @@ function mountTxForm() {
 }
 
 /* ============ helpers for the phone composer ============ */
-/* A category's envelope for one month: this month's budget plus, for a
-   rollover envelope, the whole unspent chain behind it. Standalone rather
+/* A category's envelope for one month: this month's budget plus the whole
+   unspent chain behind it. Standalone rather
    than reusing paintBudget's closures, since the composer only ever needs
    one category at a time. */
 function catAvailable(cid, mo) {
   const c = S.cats.find(x => x.id === cid);
   if (!c) return 0;
   const bAt = m2 => Number(S.budgets.find(b => b.category_id === cid && b.month === m2)?.budgeted) || 0;
-  if (!c.rollover) return bAt(mo);
   const spentAt = m2 => S.txs.filter(t => t.category_id === cid && !t.transfer_account_id && ym(t.date) === m2 && +t.amount < 0)
     .reduce((s,t) => s + Math.abs(+t.amount), 0);
   let first = null;
@@ -4194,7 +4228,7 @@ function catManageSheet() {
             <span style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--pine);font-weight:700">${esc(g.name)}</span>
             <em>${list.length}</em><em class="chev">›</em></button>
           ${list.map(c => `<button class="more-row" data-cmc="${c.id}" style="font-size:15px;font-weight:400">
-            <span>${esc(c.name)}</span>${c.rollover ? '<em style="color:var(--brass)">↻</em>' : ""}<em class="chev">›</em></button>`).join("")}
+            <span>${esc(c.name)}</span><em class="chev">›</em></button>`).join("")}
         </div>`;
       }).join("")}
       <div class="m-foot">
@@ -4252,8 +4286,107 @@ async function bulkFill(m, mode) {
   go("budget");
 }
 
+/* Moving money, from the envelope you are looking at. You open the envelope
+   you want to fill (or empty) and pick the other side: Left to budget, or
+   another envelope in the same space. Envelopes from other spaces are never
+   offered, and Left to budget is the envelope's own space's, so money never
+   crosses spaces. A move rewrites this month's budget on both sides. */
+function envMove(c, m) {
+  const L = envLedger(), space = spaceOfGroup(c.group_id);
+  const avail = L.availAt(c, m), sp = L.spentAt(c.id, m);
+  const others = S.groups.filter(g => !g.is_income && g.space_id === space).map(g => ({ g,
+    cats: S.cats.filter(x => x.group_id === g.id && !x.is_income && x.id !== c.id)
+      .map(x => ({ c: x, left: L.availAt(x, m) - L.spentAt(x.id, m) })) })).filter(x => x.cats.length);
+  return { c, m, space, avail, sp, left: avail - sp, carry: avail - L.bAt(m, c.id), ltb: leftToBudget(space), others };
+}
+function moveText(e, mv) {
+  const inn = mv.dir === "in", a = mv.amt;
+  const src = mv.other ? e.others.flatMap(x => x.cats).find(x => x.c.id === mv.other) : null;
+  const pool = src ? src.left : e.ltb, name = src ? src.c.name : "Left to budget";
+  // A warning, not a block: going over is allowed, it just shows up in red.
+  const warn = !a ? ""
+    : inn && a > pool ? (src ? `${name} only has ${smv(Math.max(0, pool))} left.` : `That's more than Left to budget has. It would go to −${smv(a - pool)}.`)
+    : !inn && a > Math.max(0, e.left) ? `Only ${smv(Math.max(0, e.left))} is left in ${e.c.name}.` : "";
+  const go = !a ? (inn ? "Fund" : "Withdraw") : inn ? `Fund ${smv(a)} from ${name}` : `Withdraw ${smv(a)} to ${name}`;
+  return { pool, name, warn, go };
+}
+function moveHTML(e, mv, cur) {
+  const inn = mv.dir === "in";
+  // An envelope with nothing left can't give money; drop it as the source.
+  const srcLeft = mv.other ? e.others.flatMap(x => x.cats).find(x => x.c.id === mv.other)?.left : null;
+  if (inn && srcLeft != null && srcLeft <= 0) mv.other = "";
+  const t = moveText(e, mv);
+  const signed = v => `${v < 0 ? "−" : ""}${smv(Math.abs(v))}`;
+  const chips = [];
+  if (inn && e.left < 0) chips.push([-e.left, `Cover ${smv(-e.left)}`]);
+  if (inn && t.pool > 0) chips.push([t.pool, `All ${smv(t.pool)}`]);
+  if (!inn && e.left > 0) chips.push([e.left, `All ${smv(e.left)}`]);
+  chips.push(["+100000", "+100k"], ["+500000", "+500k"], ["+1000000", "+1m"]);
+  const opt = (v, label, off) => `<option value="${v}"${mv.other === v ? " selected" : ""}${off ? " disabled" : ""}>${esc(label)}</option>`;
+  return `
+    <div class="mv-stats">
+      <div class="statbox"><div class="lbl2">Budget</div><div class="v">${fmt(e.avail,cur)}</div>${e.carry > 0 ? `<div class="mv-sub">incl. ${smv(e.carry)} rolled in</div>` : ""}</div>
+      <div class="statbox"><div class="lbl2">Spent</div><div class="v">${fmt(e.sp,cur)}</div></div>
+      <div class="statbox"><div class="lbl2">Left</div><div class="v ${e.left < 0 ? "neg" : "pos"}">${fmt(e.left,cur)}</div></div>
+    </div>
+    <div class="amt-panel mv-panel">
+      <div class="tf-seg mv-seg"><button type="button" data-mvdir="in" class="${inn ? "on" : ""}">Fund</button><button type="button" data-mvdir="out" class="${inn ? "" : "on"}">Withdraw</button></div>
+      <div class="amt-line"><input id="mvAmt" inputmode="numeric" placeholder="0" value="${mv.amt ? nf0.format(mv.amt) : ""}"><span class="cursym">${cur === "VND" ? "₫" : esc(cur)}</span></div>
+      <div class="chiprow" style="margin-top:10px">${chips.map(([v,l]) => `<button type="button" class="qchip" data-mv="${v}">${l}</button>`).join("")}</div>
+      <label class="flabel" for="mvOther" style="margin-top:14px">${inn ? "Take it from" : "Put it back into"}</label>
+      <select id="mvOther" class="mv-sel">
+        ${opt("", `Left to budget · ${signed(e.ltb)}`)}
+        ${e.others.map(x => `<optgroup label="${esc(x.g.name)}">${x.cats.map(o => opt(o.c.id, `${o.c.name} · ${signed(o.left)} left`, inn && o.left <= 0)).join("")}</optgroup>`).join("")}
+      </select>
+      <div class="mv-hint" id="mvHint">${esc(t.warn)}</div>
+      ${e.m < ym(new Date()) ? `<div class="mv-hint soft">${esc(monthLabel(e.m))} is a past month: this changes its budget.</div>` : ""}
+      <button type="button" class="btn btn-primary mv-go" id="mvGo">${esc(t.go)}</button>
+    </div>`;
+}
+function wireMove(c, m, mv, render) {
+  const e = envMove(c, m);
+  // Typing only touches the hint and the button, never re-renders: a redraw
+  // mid-tap would swallow the click on the button.
+  const upd = () => { const t = moveText(e, mv); el("mvHint").textContent = t.warn; el("mvGo").textContent = t.go; };
+  el("mvAmt").oninput = ev => {
+    mv.amt = Number(ev.target.value.replace(/[^\d]/g, "")) || 0;
+    ev.target.value = mv.amt ? nf0.format(mv.amt) : "";   // 500000 reads as 500.000
+    upd();
+  };
+  document.querySelectorAll("#catBody [data-mvdir]").forEach(b => b.onclick = () => {
+    if (mv.dir !== b.dataset.mvdir) mv.other = "";   // a new direction starts from Left to budget
+    mv.dir = b.dataset.mvdir; render(); });
+  document.querySelectorAll("#catBody [data-mv]").forEach(b => b.onclick = () => {
+    const v = b.dataset.mv;
+    mv.amt = v[0] === "+" ? mv.amt + Number(v.slice(1)) : Number(v);
+    el("mvAmt").value = mv.amt ? nf0.format(mv.amt) : ""; upd();
+  });
+  el("mvOther").onchange = ev => { mv.other = ev.target.value; render(); };
+  el("mvGo").onclick = guardBtn(async () => {
+    const a = mv.amt;
+    if (!a) return toast("Type an amount first");
+    const sign = mv.dir === "in" ? 1 : -1;
+    const bAt = id => Number(S.budgets.find(b => b.month === m && b.category_id === id)?.budgeted || 0);
+    const rows = [{ month: m, category_id: c.id, budgeted: bAt(c.id) + sign * a }];
+    if (mv.other) rows.push({ month: m, category_id: mv.other, budgeted: bAt(mv.other) - sign * a });
+    try {
+      const saved = await rest(`budgets?on_conflict=user_id,month,category_id`, { method: "POST",
+        headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: rows });
+      (Array.isArray(saved) && saved.length ? saved : rows).forEach(r => {
+        const i = S.budgets.findIndex(b => b.month === r.month && b.category_id === r.category_id);
+        if (i >= 0) S.budgets[i] = { ...S.budgets[i], ...r }; else S.budgets.push(r);
+      });
+    } catch (err) { return toast(err.message); }
+    const other = mv.other ? catName(mv.other) : "Left to budget";
+    toast(mv.dir === "in" ? `Funded ${c.name} with ${smv(a)} from ${other}` : `Withdrew ${smv(a)} from ${c.name} to ${other}`);
+    mv.amt = 0;
+    render();
+    if (S.view === "budget") keepPlace(paintBudget);
+  });
+}
+
 /* The envelope sheet. One sheet replaces four controls the phone used to lose:
-   the amount, ↻ rollover and delete — plus rename. It opens straight
+   the amount and delete, plus rename. It opens straight
    into the number when you came from the row's amount button. */
 function catForm(c, presetGroup, month, startDelete, focus) {
   const m = month || S.budgetMonth;
@@ -4269,9 +4402,10 @@ function catForm(c, presetGroup, month, startDelete, focus) {
   const cur = CUR();
   const d = {
     name: c?.name || "", gid: c?.group_id || presetGroup || S.groups.find(g => !g.is_income)?.id || S.groups[0]?.id,
-    budget: c ? bAt(m, c.id) : 0, rollover: c ? !!c.rollover : false, committed: c ? !!c.committed : false
+    budget: c ? bAt(m, c.id) : 0, committed: c ? !!c.committed : false
   };
   let confirming = !!startDelete, reassignTo = "none";
+  const mv = { dir: "in", amt: 0, other: "" };   // the Fund / Withdraw panel
   /* An existing envelope opens on its number: the thing you came to change is
      the first thing you see, and the name and group are behind “Rename”. A new
      category still needs its name and group up front. */
@@ -4291,8 +4425,7 @@ function catForm(c, presetGroup, month, startDelete, focus) {
     const lastB = c ? bAt(prevM, c.id) : 0, a3 = c ? avg3(c.id) : 0;
     const isInc = !!grp?.is_income;                 // income categories aren't envelopes
     const isSys = !!c?.is_system;
-    const carryIn = c && S.carryIn?.month === m ? S.carryIn.by[c.id] || 0 : 0;
-    const avail = c && !isInc ? d.budget + carryIn - spentIn(c.id) : 0;
+    const env = c && !isInc ? envMove(c, m) : null;
     el("catBody").innerHTML = `
       ${c ? `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:14px">
           <h3>${esc(c.name)}</h3><span style="font-size:12.5px;color:var(--ink-soft)">${esc(grp?.name || "")} · ${esc(monthLabel(m))}</span></div>`
@@ -4308,8 +4441,10 @@ function catForm(c, presetGroup, month, startDelete, focus) {
         <div id="cNameHint" style="font-size:12px;margin-top:7px;color:${dup?"var(--neg)":"var(--ink-soft)"}">${nameHint(d.name)}</div>
       </div>`}
 
-      ${isInc ? "" : `<div class="amt-panel">
-        <label class="flabel">Budget${c ? " this month" : ` for ${monthLabel(m)}`}</label>
+      ${env ? moveHTML(env, mv, cur) : ""}
+
+      ${isInc || c ? "" : `<div class="amt-panel">
+        <label class="flabel">Budget for ${monthLabel(m)}</label>
         <div class="amt-line"><input id="cBud" inputmode="numeric" placeholder="0" value="${d.budget?nf0.format(d.budget):""}"><span class="cursym">${cur==="VND"?"₫":cur}</span></div>
         <div class="chiprow" style="margin-top:12px">
           <button class="qchip" data-b="${lastB}">${esc(monthLabel(prevM).split(" ")[0])} ${smv(lastB)}</button>
@@ -4317,18 +4452,7 @@ function catForm(c, presetGroup, month, startDelete, focus) {
           <button class="qchip" data-b="+">+500k</button>
           <button class="qchip" data-b="0">Clear</button>
         </div>
-      </div>
-
-      ${c ? `<div style="display:flex;gap:8px;margin-bottom:14px">
-        <div class="statbox"><div class="lbl2">Spent</div><div class="v">${fmt(spentIn(c.id),cur)}</div></div>
-        <div class="statbox"><div class="lbl2">Available</div><div class="v ${avail<0?"neg":"pos"}">${fmt(avail,cur)}</div></div>
-        <div class="statbox"><div class="lbl2">3-mo avg</div><div class="v">${fmt(a3,cur)}</div></div>
-      </div>` : ""}
-
-      <button id="cRo" class="ro-card ${d.rollover?"on":""}">
-        <i class="clr-dot ${d.rollover?"on":""}" style="pointer-events:none">${d.rollover?"✓":""}</i>
-        <span><b>Roll unspent into ${esc(monthLabel(shiftMonth(m,1)).split(" ")[0])}</b><span>${d.rollover ? `Anything unspent in ${monthLabel(m)} is added to this envelope next month.` : "Off — the envelope resets each month."}</span></span>
-      </button>`}
+      </div>`}
 
       ${c && isInc ? `<div style="display:flex;gap:8px;margin-bottom:16px">
         <div class="statbox"><div class="lbl2">Used in</div><div class="v">${txCount} transaction${txCount===1?"":"s"}</div></div>
@@ -4383,7 +4507,7 @@ function catForm(c, presetGroup, month, startDelete, focus) {
       const f = el("cBud");
       if (f) f.value = d.budget ? nf0.format(d.budget) : "";
     });
-    const ro = el("cRo"); if (ro) ro.onclick = () => { d.rollover = !d.rollover; render(); };
+    if (el("mvAmt")) wireMove(c, m, mv, render);
     const ask = el("cAsk"); if (ask) ask.onclick = () => { confirming = true; reassignTo = "none"; render(); };
     const keep = el("cKeep"); if (keep) keep.onclick = () => { confirming = false; render(); };
     const rs = el("cReassign"); if (rs) rs.onchange = e => { reassignTo = e.target.value; render(); };
@@ -4405,19 +4529,21 @@ function catForm(c, presetGroup, month, startDelete, focus) {
       // between the last keystroke and this click any more.
       if (!d.name || isDup(d.name)) return toast(!d.name ? "Name the category" : "That name is already used");
       const grp = S.groups.find(g => g.id === d.gid);
-      const body = { group_id: d.gid, name: d.name, is_income: grp.is_income, rollover: d.rollover, committed: d.committed };
+      const body = { group_id: d.gid, name: d.name, is_income: grp.is_income, committed: d.committed };
       let id = c?.id;
       if (c) await rest(`categories?id=eq.${c.id}`, { method: "PATCH", body });
       else { const created = await rest("categories", { method: "POST", body }); id = created[0].id; }
-      if (!grp.is_income) await saveBudget(m, id, d.budget);
+      // An existing envelope's money only changes through Fund / Withdraw,
+      // which saves as it goes; writing d.budget here would undo those moves.
+      if (!grp.is_income && !c) await saveBudget(m, id, d.budget);
       S.budOpen[grp.id] = true;   // show the envelope you just touched, even in a collapsed group
       closeModal(); toast(c ? `“${d.name}” updated` : `“${d.name}” added to ${grp.name}`); refresh();
     });
   };
   render();
   // Opened by tapping the row's amount: land in the number, caret at the end.
-  if (focus === "budget") {
-    const b = el("cBud");
+  if (focus === "move" || focus === "budget") {
+    const b = el("mvAmt") || el("cBud");
     if (b) { b.focus(); b.setSelectionRange(b.value.length, b.value.length); }
   }
 }
