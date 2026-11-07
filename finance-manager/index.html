@@ -642,6 +642,11 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .rp-erow.rp-ehead:hover{background:none}
 .rp-erow.rp-ehead .ev{font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);font-weight:600}
 .rp-egrp{border-top:1px solid var(--line-soft);margin-top:6px;padding-top:6px}
+/* Column totals, right under the Budget / Spent / Left headings. */
+.rp-erow.rp-etot{cursor:default;padding-top:4px;padding-bottom:4px}
+.rp-erow.rp-etot:hover{background:none}
+.rp-erow.rp-etot .en{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700;color:var(--ink-soft)}
+.rp-erow.rp-etot .ev{font-weight:700}
 .rp-erow.grp .en>.rp-nm>span{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:700}
 .rp-erow.grp .ev{font-weight:600}
 .rp-prow{display:grid;grid-template-columns:1fr 52px 52px;gap:8px;align-items:center;padding:6px 8px}
@@ -770,7 +775,7 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
   .rp-crow .cn{grid-column:1 / -1;padding-bottom:2px}
   .rp-erow{grid-template-columns:repeat(3,1fr)}
   .rp-erow .en{grid-column:1 / -1}
-  .rp-erow.rp-ehead>span:first-child{display:none}
+  .rp-erow.rp-ehead>span:first-child,.rp-erow.rp-etot>span:first-child{display:none}
 }
 
 /* ---------- Mobile: 16px form fields (anything smaller makes iOS zoom on focus) ---------- */
@@ -2523,7 +2528,9 @@ function paintReports() {
   const envAll = envGroups.flatMap(x => x.rows);
   envGroups.forEach(x => ["avail","sp","left"].forEach(k => x[k] = x.rows.reduce((s,e) => s + e[k], 0)));
   const overEnv = envAll.filter(e => e.left < 0);
-  const envLeft = envAll.reduce((s,e) => s + Math.max(0, e.left), 0);
+  // Column totals shown under the Budget / Spent / Left headings. Left is
+  // Budget minus Spent, so an overspent envelope pulls the total down.
+  const envTot = ["avail","sp","left"].reduce((o,k) => (o[k] = envAll.reduce((s,e) => s + e[k], 0), o), {});
   // One row shape for an envelope and for its group's totals; a group's
   // history is the sum of its envelopes', month by month. Groups start
   // closed: opening one shows its history and then its envelopes.
@@ -2647,8 +2654,9 @@ function paintReports() {
           ${CR.length > CAT_CAP ? `<button class="linkbtn" id="rpAllCats" style="margin-top:6px">${S.rpAllCats ? "Show fewer" : `Show all ${CR.length}`}</button>` : ""}
         </div>
         <div class="card rp-env">
-          <div class="rp-chead"><b>Envelopes</b><span class="rp-cnote">${smv(envLeft)} left${overEnv.length ? ` · <span style="color:var(--neg)">${overEnv.length} over</span>` : ""}</span></div>
+          <div class="rp-chead"><b>Envelopes</b><span class="rp-cnote">${overEnv.length ? `<span style="color:var(--neg)">${overEnv.length} over</span>` : ""}</span></div>
           ${envAll.length ? `<div class="rp-erow rp-ehead"><span></span><span class="ev">Budget</span><span class="ev">Spent</span><span class="ev">Left</span></div>
+            <div class="rp-erow rp-etot"><span class="en">Total</span><span class="ev">${smv(envTot.avail)}</span><span class="ev">${smv(envTot.sp)}</span><span class="ev el ${envTot.left < 0 ? "neg" : "pos"}">${envTot.left < 0 ? "\u2212" : ""}${smv(Math.abs(envTot.left))}</span></div>
             ${envGroups.map(x => `<div class="rp-egrp">${grpRow(x)}</div>${S.rpOpen["g" + x.g.id] ? x.rows.map(envRow).join("") : ""}`).join("")}`
             : `<div class="empty">No envelopes budgeted for ${monthLabel(m)}.</div>`}
         </div>
