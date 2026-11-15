@@ -722,6 +722,8 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .bud-sp span{display:flex;align-items:center;gap:6px;white-space:nowrap}
 .bud-sp i{width:8px;height:8px;border-radius:3px;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.45)}
 .bud-sp b{font-family:var(--mono);color:#fff;font-weight:600}
+.bud-auto>span:first-child{text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;font-weight:700}
+.bud-auto .af-n{opacity:.75}
 .mv-stats{display:flex;gap:8px;margin-bottom:12px}
 .mv-sub{font-size:11px;color:var(--ink-soft);margin-top:2px}
 .mv-seg{margin-bottom:12px}
@@ -2937,6 +2939,26 @@ function paintBudget() {
   const left = leftToBudget();
   const perSpace = S.activeSpace === "all" && S.spaces.length > 1 ? S.spaces.map(sp => ({ sp, v: leftToBudget(sp.id) })) : [];
 
+  /* Auto-fund at a glance, for the month on screen and the space in view:
+     what each mode put in from Left to budget. A month auto-fund hasn't
+     reached yet shows what it will put in instead (a top-up can't know that
+     ahead, so it shows its target). */
+  const autoStat = mode => {
+    const rowOf = c => S.budgets.find(b => b.month === m && b.category_id === c.id);
+    const cs = envAll.map(e => e.c).filter(c => c.auto_mode === mode && c.auto_from && c.auto_from <= m);
+    const done = cs.filter(c => rowOf(c)?.auto_funded != null), todo = cs.filter(c => !done.includes(c));
+    return { n: cs.length, todo: todo.length,
+      got: done.reduce((s,c) => s + (Number(rowOf(c).auto_funded) || 0), 0),
+      plan: todo.reduce((s,c) => s + Number(c.auto_amount), 0),
+      target: cs.reduce((s,c) => s + Number(c.auto_amount), 0) };
+  };
+  const afAdd = autoStat("add"), afTop = autoStat("topup");
+  const afN = n => ` <span class="af-n">· ${n}</span>`;
+  const autoLine = afAdd.n || afTop.n ? `<div class="bud-sp bud-auto"><span>Auto-fund</span>
+      ${afAdd.n ? `<span title="${afAdd.todo ? "Put in on the first open of the month" : "Put in automatically this month"}">Add <b>${smv(afAdd.got + afAdd.plan)}</b>${afAdd.todo ? " planned" : ""}${afN(afAdd.n)}</span>` : ""}
+      ${afTop.n ? `<span title="What it took to bring ${afTop.n === 1 ? "this envelope" : "these envelopes"} up to their targets">${afTop.todo === afTop.n ? `Top up to <b>${smv(afTop.target)}</b>` : `Top up <b>${smv(afTop.got)}</b> to reach ${smv(afTop.target)}`}${afN(afTop.n)}</span>` : ""}
+    </div>` : "";
+
   const bar = (avail, sp, l) => {
     const ratio = avail > 0 ? sp / avail : sp > 0 ? 1 : 0;
     return `<span class="bar"><i style="width:${Math.min(100, ratio*100)}%;background:${l < 0 ? "var(--neg)" : ratio > .85 ? "var(--brass)" : "var(--pos)"}"></i></span>`;
@@ -3009,6 +3031,7 @@ function paintBudget() {
       <div style="min-width:0">
         <div class="lbl bud-lbl">${left<0?"Over-allocated":"Left to budget"}</div>
         ${perSpace.length ? `<div class="bud-sp">${perSpace.map(x => `<span><i style="background:${spaceColor(x.sp.id)}"></i>${esc(x.sp.name)} <b>${x.v < 0 ? "−" : ""}${smv(Math.abs(x.v))}</b></span>`).join("")}</div>` : ""}
+        ${autoLine}
       </div>
       <div class="big" style="color:${left<0?"#F3B3A6":"#fff"}">${fmt(left,cur)}</div>
     </div>
