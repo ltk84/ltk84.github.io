@@ -685,7 +685,11 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .rp-erow .en{min-width:0;display:flex;flex-direction:column;gap:4px;font-size:12px}
 .rp-erow .en>.rp-nm{white-space:nowrap}
 .rp-erow .en em{font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--pos)}
-.rp-erow .en em.af-tag{color:var(--brass)}
+/* Auto-fund badge on the white card: blue Add, brass Top up (checked on
+   white, white glyph at 5.4:1 and 4:1). The strip below swaps in its own
+   steps of the same two hues for the pine background. */
+.af-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:15px;height:15px;border-radius:99px;font-style:normal;font-size:12px;font-weight:700;line-height:1;color:#fff;font-family:var(--sans)}
+.af-badge.af-add{background:#256abf}.af-badge.af-top{background:#a87718}
 .rp-erow .en .bar{margin:0}
 .rp-erow .ev{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;white-space:nowrap}
 .rp-erow .el{font-weight:600}
@@ -722,8 +726,21 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .bud-sp span{display:flex;align-items:center;gap:6px;white-space:nowrap}
 .bud-sp i{width:8px;height:8px;border-radius:3px;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.45)}
 .bud-sp b{font-family:var(--mono);color:#fff;font-weight:600}
-.bud-auto>span:first-child{text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;font-weight:700}
-.bud-auto>span:first-child b{font-size:12px;letter-spacing:0;text-transform:none}
+/* Auto-fund bar. Colours checked against the strip's pine (all six checks
+   pass): blue for Add, amber for Top up. Parts are split by a 2px gap in
+   the strip's own colour, never a stroke. */
+.bud-auto{margin-top:8px;width:min(100%,260px);font-size:12px;color:#9FBCB4}
+.af-head{text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;font-weight:700}
+.af-head b{font-family:var(--mono);font-size:12px;letter-spacing:0;text-transform:none;color:#fff;font-weight:600}
+.af-bar{display:flex;gap:2px;height:8px;margin:5px 0 6px;border-radius:99px;overflow:hidden}
+.af-bar:empty{background:rgba(255,255,255,.12)}
+.af-bar i{min-width:4px}
+.af-add{background:#4a90e6}.af-top{background:#c98500}
+.af-leg{display:flex;flex-wrap:wrap;gap:3px 14px}
+.af-leg span{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.af-leg .af-badge{color:#14453C}
+.af-leg .af-badge.af-add{background:#4a90e6}.af-leg .af-badge.af-top{background:#c98500}
+.af-leg b{font-family:var(--mono);color:#fff;font-weight:600}
 .mv-stats{display:flex;gap:8px;margin-bottom:12px}
 .mv-sub{font-size:11px;color:var(--ink-soft);margin-top:2px}
 .mv-seg{margin-bottom:12px}
@@ -1351,6 +1368,13 @@ async function ensureSystemCats() {
    of months behind it, so a 4-month slice can't tell you what's in it. One row
    per category per budgeted month — small enough to just hold. */
 async function loadBudgets() { S.budgets = await rest("budgets?select=*"); await autoFund(); }
+/* The auto-fund badge: a small coloured disc with the mode's glyph, + for
+   Add and ↑ for Top up. The glyph alone tells them apart, so colour is a
+   second cue, never the only one. */
+function afBadge(mode, extra = "") {
+  const top = mode === "topup";
+  return `<i class="af-badge af-${top ? "top" : "add"}${extra}" title="Auto-fund: ${top ? "topped up to its target" : "same amount added"} every month">${top ? "↑" : "+"}</i>`;
+}
 /* One budget row into S.budgets, replacing the one for the same envelope and month. */
 function putBudget(r) {
   const i = S.budgets.findIndex(b => b.month === r.month && b.category_id === r.category_id);
@@ -2956,10 +2980,18 @@ function paintBudget() {
   };
   const afAdd = autoStat("add"), afTop = autoStat("topup");
   const afExp = afAdd.todo || afTop.todo;
-  const autoLine = afAdd.n || afTop.n ? `<div class="bud-sp bud-auto">
-      <span title="${afExp ? "Expected to go in from Left to budget on the first open of the month" : "Went in from Left to budget automatically this month"}">Auto-fund${afExp ? " expected" : ""} <b>${smv(afAdd.v + afTop.v)}</b></span>
-      ${afAdd.n ? `<span>Add <b>${smv(afAdd.v)}</b></span>` : ""}
-      ${afTop.n ? `<span title="Topping up to ${smv(afTop.target)} in total">Top up <b>${smv(afTop.v)}</b></span>` : ""}
+  /* A thin segmented bar: one whole (the month's auto-fund) split into Add
+     and Top up, widths by amount, a part at zero drawing nothing. The legend
+     under it names each part and carries its amount, so colour is never the
+     only way to tell them apart; hovering a part shows it too. */
+  const afTot = afAdd.v + afTop.v;
+  const afParts = [["add", "Add", afAdd], ["top", "Top up", afTop]].filter(([, , x]) => x.n);
+  const afTip = (k, x) => k === "top" ? `Top up: ${smv(x.v)} to reach ${smv(x.target)}` : `Add: ${smv(x.v)}`;
+  const autoLine = afParts.length ? `<div class="bud-auto">
+      <div class="af-head" title="${afExp ? "Expected to go in from Left to budget on the first open of the month" : "Went in from Left to budget automatically this month"}">Auto-fund${afExp ? " expected" : ""} <b>${smv(afTot)}</b></div>
+      <div class="af-bar">${afParts.filter(([, , x]) => x.v > 0).map(([k, , x]) =>
+        `<i class="af-${k}" style="flex:${x.v} 1 0" title="${afTip(k, x)}"></i>`).join("")}</div>
+      <div class="af-leg">${afParts.map(([k, l, x]) => `<span title="${afTip(k, x)}">${afBadge(k === "top" ? "topup" : "add")}${l} <b>${smv(x.v)}</b></span>`).join("")}</div>
     </div>` : "";
 
   const bar = (avail, sp, l) => {
@@ -2969,7 +3001,7 @@ function paintBudget() {
   const cells = (avail, sp, l) => `<span class="ev${avail ? "" : " zero"}">${smv(avail)}</span><span class="ev${sp ? "" : " zero"}">${smv(sp)}</span>
     <span class="ev el ${l < 0 ? "neg" : l ? "pos" : "zero"}">${l < 0 ? "−" : ""}${smv(Math.abs(l))}</span>`;
   const envRow = e => `<div class="rp-erow bud-env" data-env="${e.c.id}" title="Fund or withdraw">
-      <span class="en"><span class="rp-nm"><span>${esc(e.c.name)}</span>${e.c.auto_mode ? `<em class="af-tag" title="${e.c.auto_mode === "topup" ? "Topped up" : "Funded"} automatically every month">auto</em>` : ""}${e.carry > 0 ? `<em title="Rolled in from earlier months">+${smv(e.carry)} in</em>` : ""}</span>${bar(e.avail, e.sp, e.left)}</span>
+      <span class="en"><span class="rp-nm"><span>${esc(e.c.name)}</span>${e.c.auto_mode ? afBadge(e.c.auto_mode) : ""}${e.carry > 0 ? `<em title="Rolled in from earlier months">+${smv(e.carry)} in</em>` : ""}</span>${bar(e.avail, e.sp, e.left)}</span>
       ${cells(e.avail, e.sp, e.left)}
     </div>`;
   const grpRow = x => {
@@ -3031,7 +3063,7 @@ function paintBudget() {
   const incGroups = groups.filter(g => g.is_income);
   el("viewBody").innerHTML = `
     <div class="hero bud-left">
-      <div style="min-width:0">
+      <div style="min-width:0;flex:1">
         <div class="lbl bud-lbl">${left<0?"Over-allocated":"Left to budget"}</div>
         ${perSpace.length ? `<div class="bud-sp">${perSpace.map(x => `<span><i style="background:${spaceColor(x.sp.id)}"></i>${esc(x.sp.name)} <b>${x.v < 0 ? "−" : ""}${smv(Math.abs(x.v))}</b></span>`).join("")}</div>` : ""}
         ${autoLine}
@@ -4417,7 +4449,7 @@ function catManageSheet() {
             <span style="font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--pine);font-weight:700">${esc(g.name)}</span>
             <em>${list.length}</em><em class="chev">›</em></button>
           ${list.map(c => `<button class="more-row" data-cmc="${c.id}" style="font-size:15px;font-weight:400">
-            <span>${esc(c.name)}</span>${c.auto_mode ? '<em style="color:var(--brass)">auto</em>' : ""}<em class="chev">›</em></button>`).join("")}
+            <span>${esc(c.name)}</span>${c.auto_mode ? afBadge(c.auto_mode) : ""}<em class="chev">›</em></button>`).join("")}
         </div>`;
       }).join("")}
       <div class="m-foot">
