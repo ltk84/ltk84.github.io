@@ -2988,7 +2988,7 @@ function paintBudget() {
   const afParts = [["add", "Add", afAdd], ["top", "Top up", afTop]].filter(([, , x]) => x.n);
   const afTip = (k, x) => k === "top" ? `Top up: ${smv(x.v)} to reach ${smv(x.target)}` : `Add: ${smv(x.v)}`;
   const autoLine = afParts.length ? `<div class="bud-auto">
-      <div class="af-head" title="${afExp ? "Expected to go in from Left to budget on the first open of the month" : "Went in from Left to budget automatically this month"}">Auto-fund${afExp ? " expected" : ""} <b>${smv(afTot)}</b></div>
+      <div class="af-head" title="${afExp ? "Expected to go in from Left to budget on the first open of the month" : "Went in from Left to budget automatically this month"}">${afExp ? "Auto-fund expected" : "Auto-funded"} <b>${smv(afTot)}</b></div>
       <div class="af-bar">${afParts.filter(([, , x]) => x.v > 0).map(([k, , x]) =>
         `<i class="af-${k}" style="flex:${x.v} 1 0" title="${afTip(k, x)}"></i>`).join("")}</div>
       <div class="af-leg">${afParts.map(([k, l, x]) => `<span title="${afTip(k, x)}">${afBadge(k === "top" ? "topup" : "add")}${l} <b>${smv(x.v)}</b></span>`).join("")}</div>
