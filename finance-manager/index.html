@@ -723,7 +723,7 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .bud-sp i{width:8px;height:8px;border-radius:3px;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.45)}
 .bud-sp b{font-family:var(--mono);color:#fff;font-weight:600}
 .bud-auto>span:first-child{text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;font-weight:700}
-.bud-auto .af-n{opacity:.75}
+.bud-auto>span:first-child b{font-size:12px;letter-spacing:0;text-transform:none}
 .mv-stats{display:flex;gap:8px;margin-bottom:12px}
 .mv-sub{font-size:11px;color:var(--ink-soft);margin-top:2px}
 .mv-seg{margin-bottom:12px}
@@ -2940,23 +2940,26 @@ function paintBudget() {
   const perSpace = S.activeSpace === "all" && S.spaces.length > 1 ? S.spaces.map(sp => ({ sp, v: leftToBudget(sp.id) })) : [];
 
   /* Auto-fund at a glance, for the month on screen and the space in view:
-     what each mode put in from Left to budget. A month auto-fund hasn't
-     reached yet shows what it will put in instead (a top-up can't know that
-     ahead, so it shows its target). */
+     the money it takes from Left to budget, in total and per mode. A month
+     already funded shows what went in. One it hasn't reached yet shows what
+     is expected: the Add amounts, and for a top-up the gap between its
+     target and what the envelope would carry in today, so that part moves
+     as you spend. */
   const autoStat = mode => {
     const rowOf = c => S.budgets.find(b => b.month === m && b.category_id === c.id);
     const cs = envAll.map(e => e.c).filter(c => c.auto_mode === mode && c.auto_from && c.auto_from <= m);
     const done = cs.filter(c => rowOf(c)?.auto_funded != null), todo = cs.filter(c => !done.includes(c));
+    const exp = c => mode === "add" ? Number(c.auto_amount) : Math.max(0, Number(c.auto_amount) - L.availAt(c, m));
     return { n: cs.length, todo: todo.length,
-      got: done.reduce((s,c) => s + (Number(rowOf(c).auto_funded) || 0), 0),
-      plan: todo.reduce((s,c) => s + Number(c.auto_amount), 0),
+      v: done.reduce((s,c) => s + (Number(rowOf(c).auto_funded) || 0), 0) + todo.reduce((s,c) => s + exp(c), 0),
       target: cs.reduce((s,c) => s + Number(c.auto_amount), 0) };
   };
   const afAdd = autoStat("add"), afTop = autoStat("topup");
-  const afN = n => ` <span class="af-n">· ${n}</span>`;
-  const autoLine = afAdd.n || afTop.n ? `<div class="bud-sp bud-auto"><span>Auto-fund</span>
-      ${afAdd.n ? `<span title="${afAdd.todo ? "Put in on the first open of the month" : "Put in automatically this month"}">Add <b>${smv(afAdd.got + afAdd.plan)}</b>${afAdd.todo ? " planned" : ""}${afN(afAdd.n)}</span>` : ""}
-      ${afTop.n ? `<span title="What it took to bring ${afTop.n === 1 ? "this envelope" : "these envelopes"} up to their targets">${afTop.todo === afTop.n ? `Top up to <b>${smv(afTop.target)}</b>` : `Top up <b>${smv(afTop.got)}</b> to reach ${smv(afTop.target)}`}${afN(afTop.n)}</span>` : ""}
+  const afExp = afAdd.todo || afTop.todo;
+  const autoLine = afAdd.n || afTop.n ? `<div class="bud-sp bud-auto">
+      <span title="${afExp ? "Expected to go in from Left to budget on the first open of the month" : "Went in from Left to budget automatically this month"}">Auto-fund${afExp ? " expected" : ""} <b>${smv(afAdd.v + afTop.v)}</b></span>
+      ${afAdd.n ? `<span>Add <b>${smv(afAdd.v)}</b></span>` : ""}
+      ${afTop.n ? `<span title="Topping up to ${smv(afTop.target)} in total">Top up <b>${smv(afTop.v)}</b></span>` : ""}
     </div>` : "";
 
   const bar = (avail, sp, l) => {
