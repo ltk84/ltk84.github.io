@@ -685,11 +685,13 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .rp-erow .en{min-width:0;display:flex;flex-direction:column;gap:4px;font-size:12px}
 .rp-erow .en>.rp-nm{white-space:nowrap}
 .rp-erow .en em{font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--pos)}
-/* Auto-fund badge on the white card: blue Add, brass Top up (checked on
-   white, white glyph at 5.4:1 and 4:1). The strip below swaps in its own
-   steps of the same two hues for the pine background. */
-.af-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:15px;height:15px;border-radius:99px;font-style:normal;font-size:12px;font-weight:700;line-height:1;color:#fff;font-family:var(--sans)}
-.af-badge.af-add{background:#256abf}.af-badge.af-top{background:#a87718}
+/* Auto-fund badge, in the app's own colours: green (--pos) for Add, brass
+   for Top up, white glyph. The glyph tells them apart on its own, which the
+   pair needs: in red-green colour blindness the two are close. The strip
+   below uses lighter steps of the same two for the pine background. */
+.af-badge{display:inline-flex;align-items:center;justify-content:center;flex:none;width:16px;height:16px;border-radius:99px;color:#fff}
+.af-badge svg{width:10px;height:10px}
+.af-badge.af-add{background:var(--pos)}.af-badge.af-top{background:var(--brass)}
 .rp-erow .en .bar{margin:0}
 .rp-erow .ev{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:12px;white-space:nowrap}
 .rp-erow .el{font-weight:600}
@@ -727,7 +729,7 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .bud-sp i{width:8px;height:8px;border-radius:3px;flex:none;box-shadow:0 0 0 1px rgba(255,255,255,.45)}
 .bud-sp b{font-family:var(--mono);color:#fff;font-weight:600}
 /* Auto-fund bar. Colours checked against the strip's pine (all six checks
-   pass): blue for Add, amber for Top up. Parts are split by a 2px gap in
+   pass): green for Add, brass for Top up. Parts are split by a 2px gap in
    the strip's own colour, never a stroke. */
 .bud-auto{margin-top:8px;width:min(100%,260px);font-size:12px;color:#9FBCB4}
 .af-head{text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;font-weight:700}
@@ -735,11 +737,11 @@ input,select,textarea{font-family:var(--sans);font-size:15px}
 .af-bar{display:flex;gap:2px;height:8px;margin:5px 0 6px;border-radius:99px;overflow:hidden}
 .af-bar:empty{background:rgba(255,255,255,.12)}
 .af-bar i{min-width:4px}
-.af-add{background:#4a90e6}.af-top{background:#c98500}
+.af-add{background:#3FA37E}.af-top{background:#BA881A}
 .af-leg{display:flex;flex-wrap:wrap;gap:3px 14px}
 .af-leg span{display:flex;align-items:center;gap:6px;white-space:nowrap}
 .af-leg .af-badge{color:#14453C}
-.af-leg .af-badge.af-add{background:#4a90e6}.af-leg .af-badge.af-top{background:#c98500}
+.af-leg .af-badge.af-add{background:#3FA37E}.af-leg .af-badge.af-top{background:#BA881A}
 .af-leg b{font-family:var(--mono);color:#fff;font-weight:600}
 .mv-stats{display:flex;gap:8px;margin-bottom:12px}
 .mv-sub{font-size:11px;color:var(--ink-soft);margin-top:2px}
@@ -1373,7 +1375,10 @@ async function loadBudgets() { S.budgets = await rest("budgets?select=*"); await
    second cue, never the only one. */
 function afBadge(mode, extra = "") {
   const top = mode === "topup";
-  return `<i class="af-badge af-${top ? "top" : "add"}${extra}" title="Auto-fund: ${top ? "topped up to its target" : "same amount added"} every month">${top ? "↑" : "+"}</i>`;
+  // Both drawn on the same 10px grid with the same stroke, so they match in
+  // size and weight (text glyphs didn't: + sat smaller than ↑).
+  const path = top ? "M5 8.2V1.8M2.2 4.6 5 1.8l2.8 2.8" : "M5 1.8v6.4M1.8 5h6.4";
+  return `<i class="af-badge af-${top ? "top" : "add"}${extra}" title="Auto-fund: ${top ? "topped up to its target" : "same amount added"} every month"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg></i>`;
 }
 /* One budget row into S.budgets, replacing the one for the same envelope and month. */
 function putBudget(r) {
